@@ -1,0 +1,13 @@
+# go build artifacts
+/bin/
+*.exe
+*.test
+*.out
+
+# env files
+.env
+*.env
+
+# editor
+.DS_Store
+.vscode/
