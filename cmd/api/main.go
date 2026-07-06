@@ -10,6 +10,10 @@ import (
 	"os"            // for env variables (port)
 	"time"          //  timeouts for slow clients
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
+
+	"github.com/kenoi1/parasol/internal/finnhub"
 	"github.com/kenoi1/parasol/internal/store"
 )
 
@@ -27,7 +31,31 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/*
+wraps an outer functions that takes pool, and returns actual handler to inject dependencies
+into handles w/o global vars. cal watchlist handler and it hands back http handler func.
+
+r.Contect() - every incoming req carries context which is tied to req lifecycle.
+pass context down into db calls.
+*/
+func watchlistHandler(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		items, err := store.GetWatchlist(r.Context(), pool)
+		if err != nil {
+			http.Error(w, "failed to fetch watchlist", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(items)
+	}
+}
+
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("no .env file found, relying on system environment variables")
+	}
+
 	fmt.Println("Hello, World!") // greetings!
 	fmt.Println(Hello("derek"))
 	// fmt.Println(quote.Opt())
@@ -56,9 +84,32 @@ func main() {
 	}
 	log.Println("connected to postgres successfully")
 
+	// get finnhub data
+	fh := finnhub.NewClient(os.Getenv("FINNHUB_API_KEY"))
+	quote, err := fh.GetQuote("TQQQ")
+	if err != nil {
+		log.Fatalf("failed to get quote: %v", err)
+	}
+	log.Printf("TQQQ quote: %+v", quote)
+
+	// get stored tickers
+	tickers := []string{"TQQQ", "SMH", "XEQT"}
+	for _, t := range tickers {
+		if err := store.AddTicker(ctx, pool, t); err != nil {
+			log.Fatalf("failed to add ticker %s: %v", t, err)
+		}
+	}
+
+	items, err := store.GetWatchlist(ctx, pool)
+	if err != nil {
+		log.Fatalf("failed to get watchlist %v", err)
+	}
+	log.Printf("current watchlist: %+v", items)
+
 	// multiplexer: map url paths to functions
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/watchlist", watchlistHandler(pool))
 
 	srv := &http.Server{ // server start logic
 		Addr:         ":" + port,       //  addr to listen on
