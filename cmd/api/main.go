@@ -14,6 +14,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/kenoi1/parasol/internal/finnhub"
+	"github.com/kenoi1/parasol/internal/ingest"
 	"github.com/kenoi1/parasol/internal/store"
 )
 
@@ -86,18 +87,22 @@ func main() {
 
 	// get finnhub data
 	fh := finnhub.NewClient(os.Getenv("FINNHUB_API_KEY"))
-	quote, err := fh.GetQuote("TQQQ")
-	if err != nil {
-		log.Fatalf("failed to get quote: %v", err)
-	}
-	log.Printf("TQQQ quote: %+v", quote)
+	// quote, err := fh.GetQuote("TQQQ")
+	// if err != nil {
+	// 	log.Fatalf("failed to get quote: %v", err)
+	// }
+	// log.Printf("TQQQ quote: %+v", quote)
 
 	// get stored tickers
-	tickers := []string{"TQQQ", "SMH", "XEQT"}
+	tickers := []string{"TQQQ", "SMH", "UPRO", "CHPS"}
 	for _, t := range tickers {
 		if err := store.AddTicker(ctx, pool, t); err != nil {
 			log.Fatalf("failed to add ticker %s: %v", t, err)
 		}
+	}
+
+	if err := ingest.RunOnce(ctx, pool, fh); err != nil {
+		log.Printf("ingestion run failed: %v", err)
 	}
 
 	items, err := store.GetWatchlist(ctx, pool)

@@ -58,5 +58,9 @@ func (c *Client) GetQuote(ticker string) (*Quote, error) {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
+	if quote.CurrentPrice == 0 && quote.Open == 0 && quote.PreviousClose == 0 {
+		return nil, fmt.Errorf("no data returned for ticker %q (unsupported symbol or no access)", ticker)
+	}
+
 	return &quote, nil
 }
